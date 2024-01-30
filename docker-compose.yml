@@ -1,0 +1,186 @@
+version: '3.3'
+
+services:
+
+  mongodb:
+    container_name: "whapi-exemplo-mongodb"
+    image: mongo
+    restart: on-failure
+    #ports:
+      #- 27017:27017
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=root
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - evolution_mongodb_data:/data/db
+      - evolution_mongodb_configdb:/data/configdb
+    #expose:
+      #- 27017
+    networks:
+      - evolution-net
+
+  mongo-express:
+    container_name: "whapi-exemplo-mongodb-express"
+    image: mongo-express
+    restart: on-failure
+    #ports:
+      #- 8081:8081
+    depends_on:
+      - mongodb
+    environment:
+      ME_CONFIG_BASICAUTH_USERNAME: root
+      ME_CONFIG_BASICAUTH_PASSWORD: root
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: root
+    networks:
+      - evolution-net
+
+#  redis:
+#    container_name: "whapi-exemplo-redis"
+#    image: redis:latest
+#    restart: on-failure
+#    ports:
+#      - 6379:6379
+#    command: >
+#      redis-server
+#      --port 6379
+#      --appendonly yes
+#    volumes:
+#      - evolution_redis:/data
+#
+#  rebrow:
+#    container_name: "whapi-exemplo-rebrow"
+#    image: marian/rebrow
+#    depends_on:
+#      - whapi-exemplo-redis
+#    ports: 
+#      - 5001:5001
+
+  api:
+    container_name: "whapi-exemplo-evolution_api"
+    #build:
+    #  context: "."
+    #  dockerfile: Dockerfile
+    image: atendai/evolution-api
+    restart: always
+    depends_on:
+      - mongodb
+      #- whapi-exemplo-redis
+    #ports:
+    #  - 8088:8088
+    volumes:
+      - ./evolution_instances:/evolution/instances
+      - ./evolution_store:/evolution/store
+    env_file:
+      - .env
+    command: ['node', './dist/src/main.js']
+    #expose:
+      #- 8080
+    networks:
+      - traefik
+      - evolution-net
+    labels:
+      # The labels are usefull for Traefik only
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      # Get the routes from http
+      - "traefik.http.routers.whapi-exemplo.rule=Host(`${DOMAIN_API}`)"
+      - "traefik.http.routers.whapi-exemplo.entrypoints=web"
+      # Redirect these routes to https
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.whapi-exemplo.middlewares=redirect-to-https@docker"
+      # Get the routes from https
+      - "traefik.http.routers.whapi-exemplo-secured.rule=Host(`${DOMAIN_API}`)"
+      - "traefik.http.routers.whapi-exemplo-secured.entrypoints=web-secure"
+      # Apply autentificiation with http challenge
+      - "traefik.http.routers.whapi-exemplo-secured.tls=true"
+      - "traefik.http.routers.whapi-exemplo-secured.tls.certresolver=myhttpchallenge"
+      #- traefik.http.routers.whapi-exemplo.service=whapi-exemplo
+      #- traefik.http.services.whapi-exemplo.loadbalancer.server.port=8080
+  postgres:
+    container_name: "whapi-exemplo-postgres"
+    image: postgres:11
+    restart: always
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+      - POSTGRES_NON_ROOT_USER
+      - POSTGRES_NON_ROOT_PASSWORD
+    volumes:
+      - db_storage:/var/lib/postgresql/data
+      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - evolution-net
+
+  n8n:
+    container_name: "whapi-exemplo-n8n"
+    image: docker.n8n.io/n8nio/n8n
+    restart: always
+    environment:
+      - N8N_HOST=${DOMAIN_N8N}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - N8N_PATH
+      - WEBHOOK_URL=https://${DOMAIN_N8N}/
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
+    #ports:
+      #- 5678:5678
+    volumes:
+      - n8n_storage:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - traefik
+      - evolution-net
+    labels:
+      # The labels are usefull for Traefik only
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      # Get the routes from http
+      - "traefik.http.routers.whapi-exemplo-n8n.rule=Host(`${DOMAIN_N8N}`)"
+      - "traefik.http.routers.whapi-exemplo-n8n.entrypoints=web"
+      # Redirect these routes to https
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.whapi-exemplo-n8n.middlewares=redirect-to-https@docker"
+      # Get the routes from https
+      - "traefik.http.routers.whapi-exemplo-n8n-secured.rule=Host(`${DOMAIN_N8N}`)"
+      - "traefik.http.routers.whapi-exemplo-n8n-secured.entrypoints=web-secure"
+      # Apply autentificiation with http challenge
+      - "traefik.http.routers.whapi-exemplo-n8n-secured.tls=true"
+      - "traefik.http.routers.whapi-exemplo-n8n-secured.tls.certresolver=myhttpchallenge"
+      #- traefik.http.services.whapi-exemplo-n8n.loadbalancer.server.port=5678
+volumes:
+  evolution_mongodb_data:
+  evolution_mongodb_configdb:
+  #evolution_redis:
+  #evolution_instances:
+  evolution_store:
+  volumes:
+  db_storage:
+  n8n_storage:
+
+
+networks:
+  # enable connection with Traefik
+  traefik:
+    external: true
+  # network for the app
+  evolution-net:
+    external: true
+  
