@@ -51,9 +51,8 @@ services:
 
   api:
     container_name: "whapi-exemplo-evolution_api"
-    #build:
-    #  context: "."
-    #  dockerfile: Dockerfile
+    # Uncomment for arm64 environments
+    #image: jvnetobr/whapi:arm64
     image: atendai/evolution-api
     restart: always
     depends_on:
@@ -89,7 +88,7 @@ services:
       - traefik.http.services.whapi-exemplo.loadbalancer.server.port=8080
   postgres:
     container_name: "whapi-exemplo-postgres"
-    image: postgres:11
+    image: postgres
     restart: always
     environment:
       - POSTGRES_USER
@@ -125,8 +124,8 @@ services:
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
-    volumes:
-      - ./n8n_storage:/home/node/.n8n
+    #volumes:
+      #- ./n8n_storage:/home/node/.n8n
     depends_on:
       postgres:
         condition: service_healthy
