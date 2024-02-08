@@ -55,7 +55,7 @@ services:
 #    container_name: "whapi-exemplo-rebrow"
 #    image: marian/rebrow
 #    depends_on:
-#      - whapi-exemplo-redis
+#      - redis
 #    ports: 
 #      - 5001:5001
 
@@ -68,7 +68,7 @@ services:
     restart: always
     depends_on:
       - mongodb
-      #- whapi-exemplo-redis
+      #- redis
     #ports:
     #  - 8088:8088
     volumes:
