@@ -6,18 +6,14 @@ services:
     container_name: "whapi-exemplo-mongodb"
     image: mongo
     restart: on-failure
-    #ports:
-      #- 27017:27017
     environment:
       - MONGO_INITDB_ROOT_USERNAME=root
       - MONGO_INITDB_ROOT_PASSWORD=root
       - PUID=1000
       - PGID=1000
     volumes:
-      - evolution_mongodb_data:/data/db
-      - evolution_mongodb_configdb:/data/configdb
-    #expose:
-      #- 27017
+      - ./evolution_mongodb_data:/data/db
+      - ./evolution_mongodb_configdb:/data/configdb
     networks:
       - evolution-net
 
@@ -25,8 +21,6 @@ services:
     container_name: "whapi-exemplo-mongodb-express"
     image: mongo-express
     restart: on-failure
-    #ports:
-      #- 8081:8081
     depends_on:
       - mongodb
     environment:
@@ -42,22 +36,18 @@ services:
 #    container_name: "whapi-exemplo-redis"
 #    image: redis:latest
 #    restart: on-failure
-#    ports:
-#      - 6379:6379
 #    command: >
 #      redis-server
 #      --port 6379
 #      --appendonly yes
 #    volumes:
-#      - evolution_redis:/data
+#      - ./evolution_redis:/data
 #
 #  rebrow:
 #    container_name: "whapi-exemplo-rebrow"
 #    image: marian/rebrow
 #    depends_on:
 #      - redis
-#    ports: 
-#      - 5001:5001
 
   api:
     container_name: "whapi-exemplo-evolution_api"
@@ -69,16 +59,12 @@ services:
     depends_on:
       - mongodb
       #- redis
-    #ports:
-    #  - 8088:8088
     volumes:
       - ./evolution_instances:/evolution/instances
       - ./evolution_store:/evolution/store
     env_file:
       - .env
     command: ['node', './dist/src/main.js']
-    #expose:
-      #- 8080
     networks:
       - traefik
       - evolution-net
@@ -98,8 +84,9 @@ services:
       # Apply autentificiation with http challenge
       - "traefik.http.routers.whapi-exemplo-secured.tls=true"
       - "traefik.http.routers.whapi-exemplo-secured.tls.certresolver=myhttpchallenge"
-      #- traefik.http.routers.whapi-exemplo.service=whapi-exemplo
-      #- traefik.http.services.whapi-exemplo.loadbalancer.server.port=8080
+      # Get service on 8080 port
+      - traefik.http.routers.whapi-exemplo.service=whapi-exemplo
+      - traefik.http.services.whapi-exemplo.loadbalancer.server.port=8080
   postgres:
     container_name: "whapi-exemplo-postgres"
     image: postgres:11
@@ -111,7 +98,7 @@ services:
       - POSTGRES_NON_ROOT_USER
       - POSTGRES_NON_ROOT_PASSWORD
     volumes:
-      - db_storage:/var/lib/postgresql/data
+      - ./db_storage:/var/lib/postgresql/data
       - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
@@ -138,16 +125,15 @@ services:
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
-    #ports:
-      #- 5678:5678
     volumes:
-      - n8n_storage:/home/node/.n8n
+      - ./n8n_storage:/home/node/.n8n
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - traefik
       - evolution-net
+    #user: "${UID:-1000}:${GID:-1000}"
     labels:
       # The labels are usefull for Traefik only
       - "traefik.enable=true"
@@ -165,16 +151,6 @@ services:
       - "traefik.http.routers.whapi-exemplo-n8n-secured.tls=true"
       - "traefik.http.routers.whapi-exemplo-n8n-secured.tls.certresolver=myhttpchallenge"
       #- traefik.http.services.whapi-exemplo-n8n.loadbalancer.server.port=5678
-volumes:
-  evolution_mongodb_data:
-  evolution_mongodb_configdb:
-  #evolution_redis:
-  #evolution_instances:
-  evolution_store:
-  volumes:
-  db_storage:
-  n8n_storage:
-
 
 networks:
   # enable connection with Traefik
@@ -183,4 +159,3 @@ networks:
   # network for the app
   evolution-net:
     external: true
-  
